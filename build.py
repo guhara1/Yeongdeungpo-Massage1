@@ -16,8 +16,21 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+from datetime import datetime, timezone
+
 from content import PAGES
-from content.site import (BASE_URL, BRAND, NAV, PHONE, PHONE_DISPLAY, TELEGRAM_URL)
+from content.site import (BASE_URL, BRAND, NAV, PHONE, PHONE_DISPLAY, TELEGRAM_URL,
+                          SITE_NAME, SITE_DESC, NAVER_SITE_VERIFICATION,
+                          GOOGLE_SITE_VERIFICATION, INDEXNOW_KEY)
+
+
+def _verification_meta() -> str:
+    tags = []
+    if NAVER_SITE_VERIFICATION:
+        tags.append(f'<meta name="naver-site-verification" content="{NAVER_SITE_VERIFICATION}">')
+    if GOOGLE_SITE_VERIFICATION:
+        tags.append(f'<meta name="google-site-verification" content="{GOOGLE_SITE_VERIFICATION}">')
+    return "".join(tags)
 
 ROOT = os.path.dirname(os.path.abspath(__file__))
 MIN_INDEX_CHARS = 2000
@@ -154,6 +167,7 @@ def render_page(page: dict) -> str:
 <meta property="og:image:height" content="630">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="{BASE_URL.rstrip('/')}/assets/og-image.png">
+{_verification_meta()}<link rel="alternate" type="application/rss+xml" title="{BRAND} RSS" href="/rss.xml">
 <link rel="icon" href="/favicon.ico" sizes="48x48">
 <link rel="icon" type="image/svg+xml" href="/assets/favicon.svg">
 <link rel="icon" type="image/png" sizes="32x32" href="/assets/favicon-32.png">
@@ -262,9 +276,10 @@ def render_page(page: dict) -> str:
 def build() -> None:
     report = []
     sitemap_urls = []
+    feed_items = []  # (url, title, desc) — 색인 대상 페이지만
 
     for page in PAGES:
-        path = page["path"]  # "" 또는 "nowon-gu/wolgye-dong/" 형태
+        path = page["path"]  # "" 또는 "seoul/yeongdeungpo-gu/..." 형태
         out_dir = os.path.join(ROOT, path)
         os.makedirs(out_dir, exist_ok=True)
         html_out = render_page(page)
@@ -274,12 +289,18 @@ def build() -> None:
         chars = text_length(page["body"])
         noindex = page.get("noindex", False) or chars < MIN_INDEX_CHARS
         if not noindex:
-            sitemap_urls.append(BASE_URL.rstrip("/") + "/" + path)
+            url = BASE_URL.rstrip("/") + "/" + path
+            sitemap_urls.append(url)
+            feed_items.append((url, page["title"], page["desc"]))
         report.append((path or "/", chars, "noindex" if noindex else "index"))
 
-    # sitemap.xml
+    now = datetime.now(timezone.utc)
+    lastmod = now.strftime("%Y-%m-%d")
+    rfc822 = now.strftime("%a, %d %b %Y %H:%M:%S +0000")
+
+    # sitemap.xml (lastmod 포함 — 색인 신선도 신호)
     urls = "\n".join(
-        f"  <url><loc>{u}</loc></url>" for u in sitemap_urls
+        f"  <url><loc>{u}</loc><lastmod>{lastmod}</lastmod></url>" for u in sitemap_urls
     )
     with open(os.path.join(ROOT, "sitemap.xml"), "w", encoding="utf-8") as f:
         f.write(
@@ -288,12 +309,47 @@ def build() -> None:
             f"{urls}\n</urlset>\n"
         )
 
-    # robots.txt
+    # rss.xml (네이버 서치어드바이저 RSS 제출·빠른 발견용)
+    def esc(s: str) -> str:
+        return (s.replace("&", "&amp;").replace("<", "&lt;")
+                 .replace(">", "&gt;").replace('"', "&quot;"))
+    items = "\n".join(
+        "  <item>\n"
+        f"    <title>{esc(t)}</title>\n"
+        f"    <link>{u}</link>\n"
+        f"    <guid isPermaLink=\"true\">{u}</guid>\n"
+        f"    <description>{esc(d)}</description>\n"
+        f"    <pubDate>{rfc822}</pubDate>\n"
+        "  </item>"
+        for u, t, d in feed_items
+    )
+    home = BASE_URL.rstrip("/") + "/"
+    with open(os.path.join(ROOT, "rss.xml"), "w", encoding="utf-8") as f:
+        f.write(
+            '<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">\n'
+            "<channel>\n"
+            f"  <title>{esc(SITE_NAME)}</title>\n"
+            f"  <link>{home}</link>\n"
+            f'  <atom:link href="{home}rss.xml" rel="self" type="application/rss+xml"/>\n'
+            f"  <description>{esc(SITE_DESC)}</description>\n"
+            "  <language>ko</language>\n"
+            f"  <lastBuildDate>{rfc822}</lastBuildDate>\n"
+            f"{items}\n"
+            "</channel>\n</rss>\n"
+        )
+
+    # robots.txt — sitemap·rss 안내
     with open(os.path.join(ROOT, "robots.txt"), "w", encoding="utf-8") as f:
         f.write(
             "User-agent: *\nAllow: /\n\n"
             f"Sitemap: {BASE_URL.rstrip('/')}/sitemap.xml\n"
+            f"Sitemap: {BASE_URL.rstrip('/')}/rss.xml\n"
         )
+
+    # IndexNow 키 파일 — 루트에 발행 (검색엔진이 소유권 확인용으로 조회)
+    with open(os.path.join(ROOT, f"{INDEXNOW_KEY}.txt"), "w", encoding="utf-8") as f:
+        f.write(INDEXNOW_KEY + "\n")
 
     # .nojekyll (GitHub Pages)
     open(os.path.join(ROOT, ".nojekyll"), "w").close()
@@ -303,7 +359,8 @@ def build() -> None:
     for p, c, r in sorted(report):
         flag = "" if (r == "noindex" or MIN_INDEX_CHARS <= c <= 2500) else "  ⚠"
         print(f"{p.ljust(width)}  {str(c).rjust(5)}  {r}{flag}")
-    print(f"\n{len(report)} pages built, {len(sitemap_urls)} in sitemap.")
+    print(f"\n{len(report)} pages built, {len(sitemap_urls)} in sitemap/rss.")
+    print(f"IndexNow key file: /{INDEXNOW_KEY}.txt")
 
 
 if __name__ == "__main__":

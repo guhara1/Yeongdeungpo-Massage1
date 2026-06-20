@@ -2,3 +2,4 @@ User-agent: *
 Allow: /
 
 Sitemap: https://yeongdeungpo-massage1.pages.dev/sitemap.xml
+Sitemap: https://yeongdeungpo-massage1.pages.dev/rss.xml

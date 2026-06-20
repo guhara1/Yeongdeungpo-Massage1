@@ -9,6 +9,19 @@ PHONE_DISPLAY = "0508-202-4719"
 # 외부 문의 채널(텔레그램) — 푸터 제작·제휴 문의 버튼에 연결
 TELEGRAM_URL = "https://t.me/googleseolab"
 
+# 사이트 메타 — RSS·검색엔진 등록용
+SITE_NAME = "바로GO — 영등포 출장마사지·홈타이 안내"
+SITE_DESC = "영등포구 전지역 방문 출장마사지·홈타이 예약 안내. 여의도·영등포역·당산·문래·신길 생활권 정보."
+
+# 네이버 서치어드바이저 사이트 소유확인 (모든 페이지 <head>에 출력)
+NAVER_SITE_VERIFICATION = "8245b35f14db981b695e5bf4df4fda6798e08709"
+# 구글 서치콘솔 소유확인 (값이 있으면 출력) — 발급 후 채우세요.
+GOOGLE_SITE_VERIFICATION = ""
+
+# IndexNow 키 — 빌드 시 루트에 {INDEXNOW_KEY}.txt 로 발행되고, tools/indexnow.py 가 사용한다.
+# Bing·Naver·Yandex 등 IndexNow 참여 검색엔진에 즉시 색인 통보용.
+INDEXNOW_KEY = "ffce108031f63445339b568a26fa3ce3"
+
 # 상단 메뉴 — 메뉴명·URL 에는 "출장마사지"를 반복하지 않고 지역명·역명만 표시한다.
 NAV = [
     ("홈", "/", []),
